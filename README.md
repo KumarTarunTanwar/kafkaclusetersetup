@@ -51,6 +51,7 @@ Java Should be installed and running
     
 4.  After Script Completion Cruise Control UI will be Running on http://localhost:9090/
     #####1.  Cruise Control Home
+    
     ![img.png](CCHomePage.png)
 
     -> Select the env
@@ -60,6 +61,7 @@ Java Should be installed and running
     ![img.png](CCClusterStatus.png)
 
     #####3. Under Kafka Cluster Administration
+    
     Below screen is for Doing Kafka Cluster rebalance with advanced options.
 
     ![img.png](CCrebalance.png)
