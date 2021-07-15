@@ -7,12 +7,16 @@ downloadRequriedFiles(){
   script_path1="${BASH_SOURCE[0]}"
   DIR="$( dirname "$SOURCE" )"
   cp $DIR/cruise-control.zip /tmp/kafkacluster/cruisecontrol && tar -xzf /tmp/kafkacluster/cruisecontrol/cruise-control.zip -C /tmp/kafkacluster/cruisecontrol
+  cp $DIR/cruise-control-ui.tar.gz /tmp/kafkacluster/cruisecontrol && tar -xzf /tmp/kafkacluster/cruisecontrol/cruise-control-ui.tar.gz -C /tmp/kafkacluster/cruisecontrol/cruise-control
 
   mkdir -p /tmp/kafkacluster/kafka
   if [ ! -d "/tmp/kafkacluster/kafka/kafka_2.13-2.7.0" ]; then
      echo "\n Download kafka binary"
      curl -L https://archive.apache.org/dist/kafka/2.7.0/kafka_2.13-2.7.0.tgz -o /tmp/kafkacluster/kafka/kafka_2.13-2.7.0.tgz \
      && tar -xzf /tmp/kafkacluster/kafka/kafka_2.13-2.7.0.tgz -C /tmp/kafkacluster/kafka
+
+    cp $DIR/cruise-control-metrics-reporter-2.5.32.jar /tmp/kafkacluster/kafka/kafka_2.13-2.7.0/libs
+
   fi
 
   mkdir -p /tmp/kafkacluster/zookeeper
@@ -25,11 +29,12 @@ downloadRequriedFiles(){
 
 runZookeeperNode(){
 
+  echo "\n Running kafka zookeeper Node"
+
   mkdir -p /tmp/kafkacluster/zookeeper/server/data
   mkdir -p /tmp/kafkacluster/zookeeper/server/log
   mkdir -p /tmp/kafkacluster/zookeeper/server/conf
 
-  echo "Update zookeeper config file"
   echo "clientPort=${zookeeperPort}" > /tmp/kafkacluster/zookeeper/server/conf/zoo.cfg
   echo "tickTime=2000" >> /tmp/kafkacluster/zookeeper/server/conf/zoo.cfg
   echo "initLimit=10" >> /tmp/kafkacluster/zookeeper/server/conf/zoo.cfg
@@ -38,6 +43,9 @@ runZookeeperNode(){
   echo "dataLogDir=/tmp/kafkacluster/zookeeper/server/log" >> /tmp/kafkacluster/zookeeper/server/conf/zoo.cfg
 
   nohup /tmp/kafkacluster/zookeeper/zookeeper-3.4.7/bin/zkServer.sh start-foreground /tmp/kafkacluster/zookeeper/server/conf/zoo.cfg >> /tmp/kafkacluster/zookeeper/server/log/zookeeper.out &
+
+  echo "\n Wait for few seconds before next operation"
+  sleep 10
 }
 
 addKafkaNode() {
@@ -68,34 +76,42 @@ addKafkaNode() {
   ./kafka/kafka_2.13-2.7.0/bin/zookeeper-shell.sh localhost:${zookeeperPort} ls /brokers/ids
 }
 
-echo "Starting UseCase"
- kill -9 $(lsof -t -i:9090)
- kill -9 $(lsof -t -i:9095)
- kill -9 $(lsof -t -i:9096)
- kill -9 $(lsof -t -i:9097)
- kill -9 $(lsof -t -i:9098)
- kill -9 $(lsof -t -i:9099)
- kill -9 $(lsof -t -i:2182)
-sleep 10
+runCruiseControl(){
+  sleep 10
+  echo "\n Run CruiseControl with UI on http://localhost:9090/ \n "
+
+  sed -i '' -e 's/bootstrap.servers=.*/bootstrap.servers=localhost:9095,localhost:9096,localhost:9097,localhost:9098,localhost:9099/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
+  sed -i '' -e 's/zookeeper.connect=.*/zookeeper.connect=localhost:'${zookeeperPort}'/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
+  sed -i '' -e 's/capacity.config.file=.*/capacity.config.file=cruisecontrol\/cruise-control\/config\/capacityJBOD.json/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
+  sed -i '' -e 's/cluster.configs.file=.*/cluster.configs.file=cruisecontrol\/cruise-control\/config\/clusterConfigs.json/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
+  sed -i '' -e 's/sample.store.topic.replication.factor=.*/sample.store.topic.replication.factor=1/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
+  sed -i '' -e 's/webserver.ui.diskpath=.*/webserver.ui.diskpath=cruisecontrol\/cruise-control\/cruise-control-ui\/dist\//g' cruisecontrol/cruise-control/config/cruisecontrol.properties
+  sed -i '' -e 's/hard.goals=.*/hard.goals=com.linkedin.kafka.cruisecontrol.analyzer.goals.ReplicaDistributionGoal,com.linkedin.kafka.cruisecontrol.analyzer.goals.TopicReplicaDistributionGoal,com.linkedin.kafka.cruisecontrol.analyzer.goals.LeaderReplicaDistributionGoal,com.linkedin.kafka.cruisecontrol.analyzer.goals.CpuCapacityGoal/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
+  ./cruisecontrol/cruise-control/kafka-cruise-control-start.sh -jars cruisecontrol/cruise-control/cruise-control/build/dependant-libs/  cruisecontrol/cruise-control/config/cruisecontrol.properties 9090 >> /tmp/kafkacluster/cruisecontrol/logs/cruisecontrol.log &
+}
+
+echo "Starting Cluster creation"
+
+echo "Cluster Will be Starting With zookeeper:2182 and kafkabrokers 9095-0999 Cluster creation"
 
 mkdir -p /tmp/kafkacluster
 chmod -R 777 /tmp/kafkacluster
 
-zookeeperPort=2182
+zookeeperPort=2181
 
+# Download and update all required files under tmp
 downloadRequriedFiles
 
 cd /tmp/kafkacluster
 rm -rf /tmp/kafkacluster/kafka/kafka-1*
 
-echo "\n Running kafka zookeeper image"
+# Running kafka zookeeper Node
 runZookeeperNode
-echo "\n Wait for few seconds before next operation"
-sleep 10
 
 echo "\n Validate broker id $1 connected to zookeeper"
 ./kafka/kafka_2.13-2.7.0/bin/zookeeper-shell.sh localhost:${zookeeperPort} ls /brokers/ids
 
+# Addd Broker Nodes with id and port
 addKafkaNode 100 9095
 addKafkaNode 101 9096
 
@@ -110,22 +126,16 @@ do
     ((i=i+1))
 done
 
-echo "\n Waiting for few seconds"
+echo "\n Waiting for few seconds to describe all 20 topics"
 sleep 10
-echo "describe all 20 topics"
 ./kafka/kafka_2.13-2.7.0/bin/kafka-topics.sh --zookeeper localhost:${zookeeperPort} --describe
 
-sleep 10
-echo "\n Run CLUSTER REBALANCING with Cruise Control \n "
+# Run CruiseControl with UI on http://localhost:9090/
+runCruiseControl
 
-sed -i '' -e 's/bootstrap.servers=.*/bootstrap.servers=localhost:9095,localhost:9096,localhost:9097,localhost:9098,localhost:9099/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
-sed -i '' -e 's/zookeeper.connect=.*/zookeeper.connect=localhost:'${zookeeperPort}'/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
-sed -i '' -e 's/capacity.config.file=.*/capacity.config.file=cruisecontrol\/cruise-control\/config\/capacityJBOD.json/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
-sed -i '' -e 's/cluster.configs.file=.*/cluster.configs.file=cruisecontrol\/cruise-control\/config\/clusterConfigs.json/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
-sed -i '' -e 's/sample.store.topic.replication.factor=.*/sample.store.topic.replication.factor=1/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
-./cruisecontrol/cruise-control/kafka-cruise-control-start.sh -jars cruisecontrol/cruise-control/cruise-control/build/dependant-libs/  cruisecontrol/cruise-control/config/cruisecontrol.properties 9090 >> /tmp/kafkacluster/cruisecontrol/logs/cruisecontrol.log &
-
+echo "validate kafka_cluster_state"
 sleep 10
+curl http://localhost:9090/kafkacruisecontrol/kafka_cluster_state?json=true
 
 echo "\n Adding 3 new kafka broker node with cluster \n "
 addKafkaNode 102 9097
@@ -133,9 +143,5 @@ addKafkaNode 103 9098
 addKafkaNode 104 9099
 
 sleep 10
-echo "\n describe all 20 topics before CLUSTER REBALANCING \n "
-./kafka/kafka_2.13-2.7.0/bin/kafka-topics.sh --zookeeper localhost:${zookeeperPort} --describe
-
-sleep 10
-echo "\n describe all 20 topics after CLUSTER REBALANCING \n "
+echo "\n describe all 20 topics After Adding new Nodes \n "
 ./kafka/kafka_2.13-2.7.0/bin/kafka-topics.sh --zookeeper localhost:${zookeeperPort} --describe
