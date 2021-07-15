@@ -51,18 +51,18 @@ Java Should be installed and running
     
 4.  After Script Completion Cruise Control UI will be Running on http://localhost:9090/
 
-    ####1.  Cruise Control Home
+    #### 1.  Cruise Control Home
     
     ![img.png](CCHomePage.png)
 
     -> Select the env
     
-    ####2.  Kafka Cluster Status
+    #### 2.  Kafka Cluster Status
     This page shows the realtime status of the kafka cluster and reports any URP, Offline Partitions, Disks, etc.
         
     ![img.png](CCClusterStatus.png)
 
-    ####3. Under Kafka Cluster Administration
+    #### 3. Under Kafka Cluster Administration
     
     Below screen is for Doing Kafka Cluster rebalance with advanced options.
 
