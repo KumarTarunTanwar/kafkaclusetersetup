@@ -1,5 +1,5 @@
 
-# 5 Node kafka cluster setup with Cruise Control
+# 5 Node kafka cluster setup with Cruise Control for Cluster Rebalancing 
 
 ### Goal: 
 1. Setup 2 node Kafka Cluster
