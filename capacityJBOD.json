@@ -1,0 +1,54 @@
+{
+  "brokerCapacities":[
+    {
+      "brokerId": "100",
+      "capacity": {
+        "DISK": {"/tmp/kafka-logs": "500000"},
+        "CPU": "100",
+        "NW_IN": "50000",
+        "NW_OUT": "50000"
+      },
+      "doc": "This overrides the capacity for broker 100. This broker is not a JBOD broker."
+    },
+    {
+      "brokerId": "101",
+      "capacity": {
+        "DISK": {"/tmp/kafka-logs": "500000"},
+        "CPU": "100",
+        "NW_IN": "50000",
+        "NW_OUT": "50000"
+      },
+      "doc": "This overrides the capacity for broker 101. This broker is a JBOD broker."
+    },
+    {
+      "brokerId": "102",
+      "capacity": {
+        "DISK": {"/tmp/kafka-logs": "500000"},
+        "CPU": "100",
+        "NW_IN": "50000",
+        "NW_OUT": "50000"
+      },
+      "doc": "This overrides the capacity for broker 102. This broker is not a JBOD broker."
+    },
+    {
+      "brokerId": "103",
+      "capacity": {
+        "DISK": {"/tmp/kafka-logs": "500000"},
+        "CPU": "100",
+        "NW_IN": "50000",
+        "NW_OUT": "50000"
+      },
+      "doc": "This overrides the capacity for broker 103. This broker is a JBOD broker."
+    },
+    {
+      "brokerId": "104",
+      "capacity": {
+        "DISK": {"/tmp/kafka-logs": "500000"},
+        "CPU": "100",
+        "NW_IN": "50000",
+        "NW_OUT": "50000"
+      },
+      "doc": "This overrides the capacity for broker 1040. This broker is not a JBOD broker."
+    }
+  ]
+}

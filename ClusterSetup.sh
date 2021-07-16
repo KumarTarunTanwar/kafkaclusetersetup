@@ -3,11 +3,12 @@
 downloadRequriedFiles(){
 
   mkdir -p /tmp/kafkacluster/cruisecontrol/logs
-  echo "Copying cruisecontrol binary"
+  echo "\n Copying cruisecontrol binary"
   script_path1="${BASH_SOURCE[0]}"
   DIR="$( dirname "$SOURCE" )"
   cp $DIR/cruise-control.zip /tmp/kafkacluster/cruisecontrol && tar -xzf /tmp/kafkacluster/cruisecontrol/cruise-control.zip -C /tmp/kafkacluster/cruisecontrol
   cp $DIR/cruise-control-ui.tar.gz /tmp/kafkacluster/cruisecontrol && tar -xzf /tmp/kafkacluster/cruisecontrol/cruise-control-ui.tar.gz -C /tmp/kafkacluster/cruisecontrol/cruise-control
+  cp $DIR/capacityJBOD.json /tmp/kafkacluster/cruisecontrol/cruise-control/config
 
   mkdir -p /tmp/kafkacluster/kafka
   if [ ! -d "/tmp/kafkacluster/kafka/kafka_2.13-2.7.0" ]; then
@@ -15,7 +16,7 @@ downloadRequriedFiles(){
      curl -L https://archive.apache.org/dist/kafka/2.7.0/kafka_2.13-2.7.0.tgz -o /tmp/kafkacluster/kafka/kafka_2.13-2.7.0.tgz \
      && tar -xzf /tmp/kafkacluster/kafka/kafka_2.13-2.7.0.tgz -C /tmp/kafkacluster/kafka
 
-    cp $DIR/cruise-control-metrics-reporter-2.5.32.jar /tmp/kafkacluster/kafka/kafka_2.13-2.7.0/libs
+  cp $DIR/cruise-control-metrics-reporter-2.5.32.jar /tmp/kafkacluster/kafka/kafka_2.13-2.7.0/libs
 
   fi
 
@@ -87,17 +88,18 @@ runCruiseControl(){
   sed -i '' -e 's/sample.store.topic.replication.factor=.*/sample.store.topic.replication.factor=1/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
   sed -i '' -e 's/webserver.ui.diskpath=.*/webserver.ui.diskpath=cruisecontrol\/cruise-control\/cruise-control-ui\/dist\//g' cruisecontrol/cruise-control/config/cruisecontrol.properties
   sed -i '' -e 's/hard.goals=.*/hard.goals=com.linkedin.kafka.cruisecontrol.analyzer.goals.ReplicaDistributionGoal,com.linkedin.kafka.cruisecontrol.analyzer.goals.TopicReplicaDistributionGoal,com.linkedin.kafka.cruisecontrol.analyzer.goals.LeaderReplicaDistributionGoal,com.linkedin.kafka.cruisecontrol.analyzer.goals.CpuCapacityGoal/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
+  sed -i '' -e 's/default.goals=.*/default.goals=com.linkedin.kafka.cruisecontrol.analyzer.goals.ReplicaDistributionGoal,com.linkedin.kafka.cruisecontrol.analyzer.goals.TopicReplicaDistributionGoal,com.linkedin.kafka.cruisecontrol.analyzer.goals.LeaderReplicaDistributionGoal,com.linkedin.kafka.cruisecontrol.analyzer.goals.CpuCapacityGoal/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
+  sed -i '' -e 's/intra.broker.goals=.*/intra.broker.goals=com.linkedin.kafka.cruisecontrol.analyzer.goals.IntraBrokerDiskCapacityGoal,com.linkedin.kafka.cruisecontrol.analyzer.goals.IntraBrokerDiskUsageDistributionGoal/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
+  sed -i '' -e 's/anomaly.detection.goals=.*/anomaly.detection.goals=com.linkedin.kafka.cruisecontrol.analyzer.goals.ReplicaDistributionGoal,com.linkedin.kafka.cruisecontrol.analyzer.goals.CpuCapacityGoal/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
+  sed -i '' -e 's/webserver.accesslog.path=.*/webserver.accesslog.path=cruisecontrol\/logs\/access.log/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
+  sed -i '' -e 's/self.healing.exclude.recently.demoted.brokers=.*/self.healing.exclude.recently.demoted.brokers=false/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
+  sed -i '' -e 's/self.healing.exclude.recently.removed.brokers=.*/self.healing.exclude.recently.removed.brokers=false/g' cruisecontrol/cruise-control/config/cruisecontrol.properties
   ./cruisecontrol/cruise-control/kafka-cruise-control-start.sh -jars cruisecontrol/cruise-control/cruise-control/build/dependant-libs/  cruisecontrol/cruise-control/config/cruisecontrol.properties 9090 >> /tmp/kafkacluster/cruisecontrol/logs/cruisecontrol.log &
 }
 
 echo "Starting Cluster creation"
-
-echo "Cluster Will be Starting With zookeeper:2182 and kafkabrokers 9095-0999 Cluster creation"
-
 mkdir -p /tmp/kafkacluster
 chmod -R 777 /tmp/kafkacluster
-
-zookeeperPort=2181
 
 # Download and update all required files under tmp
 downloadRequriedFiles
@@ -105,19 +107,26 @@ downloadRequriedFiles
 cd /tmp/kafkacluster
 rm -rf /tmp/kafkacluster/kafka/kafka-1*
 
+echo "\n -------------------"
+zookeeperPort=2181
+echo "Cluster Will be Starting With zookeeper:${zookeeperPort} and kafkabrokers 9095-0999 Cluster creation"
+
 # Running kafka zookeeper Node
 runZookeeperNode
 
 echo "\n Validate broker id $1 connected to zookeeper"
 ./kafka/kafka_2.13-2.7.0/bin/zookeeper-shell.sh localhost:${zookeeperPort} ls /brokers/ids
 
-# Addd Broker Nodes with id and port
+echo "\n -------------------"
+# Adding Broker Nodes with id and port
 addKafkaNode 100 9095
+
+echo "\n -------------------"
 addKafkaNode 101 9096
 
+echo "\n -------------------"
 echo "\n Wait for few seconds before creating topics"
 sleep 10
-
 echo "creating 20 topics with partition 4 and replication-factor 2"
 i=1
 while [ $i -le 20 ]
@@ -126,22 +135,38 @@ do
     ((i=i+1))
 done
 
+echo "\n -------------------"
 echo "\n Waiting for few seconds to describe all 20 topics"
 sleep 10
 ./kafka/kafka_2.13-2.7.0/bin/kafka-topics.sh --zookeeper localhost:${zookeeperPort} --describe
 
-# Run CruiseControl with UI on http://localhost:9090/
-runCruiseControl
-
-echo "validate kafka_cluster_state"
-sleep 10
-curl http://localhost:9090/kafkacruisecontrol/kafka_cluster_state?json=true
-
+echo "\n -------------------"
 echo "\n Adding 3 new kafka broker node with cluster \n "
 addKafkaNode 102 9097
+echo "\n -------------------"
 addKafkaNode 103 9098
+echo "\n -------------------"
 addKafkaNode 104 9099
 
+echo "\n -------------------"
 sleep 10
 echo "\n describe all 20 topics After Adding new Nodes \n "
 ./kafka/kafka_2.13-2.7.0/bin/kafka-topics.sh --zookeeper localhost:${zookeeperPort} --describe
+
+echo "\n -------------------"
+# Run CruiseControl with UI on http://localhost:9090/
+runCruiseControl
+
+echo "\n -------------------"
+sleep 10
+echo "\n describe all topics After running Cruise Control \n "
+./kafka/kafka_2.13-2.7.0/bin/kafka-topics.sh --zookeeper localhost:${zookeeperPort} --describe
+
+echo "\n -------------------"
+echo "\n Testing on topic"
+echo "\n Current offset with topic testtopic9"
+./kafka/kafka_2.13-2.7.0/bin/kafka-run-class.sh kafka.tools.GetOffsetShell --broker-list localhost:9095 --time -1 --topic testtopic9
+echo "\n pushing the load"
+./kafka/kafka_2.13-2.7.0/bin/kafka-producer-perf-test.sh --topic testtopic9 --num-records 20000 --record-size 5000 --producer-props bootstrap.servers=localhost:9095 --throughput 10000
+echo "\n Current offset after load with topic testtopic9"
+./kafka/kafka_2.13-2.7.0/bin/kafka-run-class.sh kafka.tools.GetOffsetShell --broker-list localhost:9095 --time -1 --topic testtopic9
